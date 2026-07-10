@@ -1,30 +1,37 @@
-# Verifpal Models for UAV Swarm Command-Origin Authentication
+# Verifpal Verification Models
 
-This repository contains the Verifpal models and verification logs used to support the security analysis of the proposed UAV swarm command-origin authentication protocol. The models are written for symbolic verification under an active Dolev-Yao adversary, where the attacker can inject, modify, replay, and delay messages, but cannot break the idealized cryptographic primitives.
+This directory contains the modular Verifpal models used to support the security analysis of the proposed UAV swarm command-origin authentication protocol. The models are analyzed under an active Dolev-Yao adversary, where runtime wireless messages are attacker-mutable. Guarded values are used only for authenticated setup material or enrolled state.
 
-The protocol combines GCS-authenticated enrollment, Merkle-root based command-token authorization, FORS-like one-time command openings, AEAD-protected command delivery, follower-specific key wrapping, and mission-role binding. Instead of placing all components in one monolithic Verifpal model, the verification is performed modularly. This avoids unnecessary symbolic state expansion and isolates the main security properties of the protocol.
+## Individual Models
 
-## Model Summary
+| No. | Model file                                   | Purpose                                                               | Verified query                                                                    | Screenshot                                              |
+| --- | -------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| 01  | `models/01_minimal_runtime_authorization.vp` | Minimal MHT/FORS runtime authorization model                          | `authentication? Leader -> Follower: p_token` with acceptance precondition        | `screenshots/01_minimal_runtime_authorization_pass.png` |
+| 02  | `models/02_runtime_ad_binding.vp`            | Runtime authorization with explicit (AD_q=(ID_L,q,M,R)) binding       | `authentication? Leader -> Follower: p_token` with acceptance precondition        | `screenshots/02_runtime_ad_binding_pass.png`            |
+| 03  | `models/03_runtime_digest_binding.vp`        | Runtime authorization with (AD_q), (N_q), and (X_q) included in (d_q) | `authentication? Leader -> Follower: p_token` with acceptance precondition        | `screenshots/03_runtime_digest_binding_pass.png`        |
+| 04  | `models/04_aead_confidentiality.vp`          | AEAD confidentiality of (K_E) and (cmd_q)                             | `confidentiality? ke`, `confidentiality? cmd_q`                                   | `screenshots/04_aead_confidentiality_pass.png`          |
+| 05  | `models/05_enrollment_authentication.vp`     | GCS-authenticated enrollment of the command root (C_L)                | `authentication? GCS -> Follower: c_root` with enrollment precondition            | `screenshots/05_enrollment_authentication_pass.png`     |
+| 06  | `models/06_keywrap_confidentiality.vp`       | Follower-specific wrapping confidentiality of (K_E) under (s_i)       | `confidentiality? si`, `confidentiality? ke`                                      | `screenshots/06_keywrap_confidentiality_pass.png`       |
+| 07  | `models/07_role_binding.vp`                  | Mission-role binding of (ID_L), (ID_i), (M), and (C_L)                | `authentication? GCS -> Follower: c_root` with role-bound enrollment precondition | `screenshots/07_role_binding_pass.png`                  |
 
-| File                              | Verified property                                                                                                     | Result |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------ |
-| `01_runtime_ad_auth.vp`           | Runtime command-token authorization with explicit (AD_q=(ID_L,q,M,R)) binding                                         | PASS   |
-| `02_runtime_digest_binding.vp`    | Runtime command-token authorization with (AD_q), (N_q), and (X_q) included in the verified digest (d_q)               | PASS   |
-| `03_aead_confidentiality.vp`      | Confidentiality of the mission encryption key (K_E) and command plaintext (cmd_q) under the symbolic AEAD abstraction | PASS   |
-| `04_enrollment_authentication.vp` | GCS-authenticated enrollment of the command root (C_L)                                                                | PASS   |
-| `05_keywrap_confidentiality.vp`   | Confidentiality of (K_E) under the follower-specific wrapping secret (s_i)                                            | PASS   |
-| `06_role_binding.vp`              | Mission-role binding of (ID_L), (ID_i), (M), and (C_L) through the GCS-authenticated mission state                    | PASS   |
+## How to Run
 
-## Modeling Notes
+Each model can be verified independently:
 
-The runtime wireless fields are intentionally left attacker-mutable. This includes the command token, command index, ciphertext, and FORS-like opening. Guarded values are used only for authenticated pre-existing trust anchors or already enrolled state, such as the GCS public key or the command-root commitment accepted during enrollment.
+```bash
+verifpal verify models/01_minimal_runtime_authorization.vp
+verifpal verify models/02_runtime_ad_binding.vp
+verifpal verify models/03_runtime_digest_binding.vp
+verifpal verify models/04_aead_confidentiality.vp
+verifpal verify models/05_enrollment_authentication.vp
+verifpal verify models/06_keywrap_confidentiality.vp
+verifpal verify models/07_role_binding.vp
+```
 
-The Merkle membership relation is modeled using a checked assertion, and the FORS-like opening is modeled using Verifpal's checked signature verification primitive. These are symbolic abstractions because Verifpal does not provide user-defined Merkle-tree or FORS primitives.
+The corresponding verification outputs are stored in the `logs/` directory, and screenshots of the passing results are stored in the `screenshots/` directory.
 
-The runtime authentication query is conditioned on an accepted-command marker. This is necessary because Verifpal treats preprocessing of attacker-supplied candidate values as primitive usage, even when later checked verification rejects the execution. The precondition therefore captures the intended security claim: if a follower reaches the accepted-command state, then the command token used in the accepted verification path originates from the authorized leader-token holder.
+## Notes on Modeling
 
-Replay protection based on (1\le q\le N) and (q>q_L^{last}) is not encoded as a Verifpal query because it requires a stateful numerical comparison. In the protocol, this property is enforced by the follower-side monotonic counter update after successful command verification.
+The models are modular rather than monolithic. This avoids unnecessary symbolic state expansion while still covering the main protocol properties: runtime command authorization, digest binding, AEAD confidentiality, GCS-authenticated enrollment, follower-specific key wrapping, and mission-role binding.
 
-## Verification Environment
-
-The models were checked using Verifpal under an active attacker setting. Each verification log in the `verification-logs/` directory contains the corresponding PASS output. Screenshots are also provided in the `screenshots/` directory for quick inspection.
+Replay protection based on (1\le q\le N) and (q>q_L^{last}) is not encoded as a Verifpal query because it requires a stateful numerical comparison. This check is enforced by the follower-side acceptance rule in the protocol.
