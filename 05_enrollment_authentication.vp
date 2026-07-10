@@ -1,0 +1,57 @@
+attacker[active]
+
+principal GCS[
+    knows public idl, m, r
+
+    knows private sk_gcs
+    knows private sk_token
+
+    pk_gcs = G^sk_gcs
+
+    // Authorized command token and command-root abstraction.
+    p_token = G^sk_token
+    c_root = HASH(p_token)
+
+    // Mission record abstraction:
+    // C_M = (M, R, ID_L, C_L, ...)
+    mission_record = HASH(idl, m, r, c_root)
+
+    // GCS signs the mission record.
+    sig_record = SIGN(sk_gcs, mission_record)
+]
+
+principal Follower[
+    knows public idl, m, r
+]
+
+principal Sink[
+    knows public sink_tag
+]
+
+// pk_gcs is pre-authenticated.
+// c_root and sig_record are enrollment-time values.
+GCS -> Follower: [pk_gcs], c_root, sig_record
+
+principal Follower[
+    // Reconstruct the enrolled mission record.
+    mission_record_f = HASH(idl, m, r, c_root)
+
+    // Verify GCS authorization of the mission record.
+    _ = SIGNVERIF(pk_gcs, mission_record_f, sig_record)?
+
+    // Fresh enrollment-acceptance marker.
+    generates enroll_marker
+    enrolled = HASH(enroll_marker)
+]
+
+Follower -> Sink: [enrolled]
+
+principal Sink[
+    use_enrolled = HASH(enrolled)
+]
+
+queries[
+    authentication? GCS -> Follower: c_root[
+        precondition[Follower -> Sink: enrolled]
+    ]
+]

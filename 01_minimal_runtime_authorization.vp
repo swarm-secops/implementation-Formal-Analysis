@@ -1,0 +1,59 @@
+attacker[active]
+
+principal Leader[
+    knows public ctx
+
+    knows private sk_token
+
+    p_token = G^sk_token
+
+    // Merkle root abstraction for the authorized command token.
+    c_root = HASH(p_token)
+
+    generates cmd
+
+    digest = HASH(ctx, cmd)
+
+    // FORS-like one-time opening abstraction.
+    sigma = SIGN(sk_token, digest)
+]
+
+principal Follower[
+    knows public ctx
+]
+
+principal Sink[
+    knows public sink_tag
+]
+
+// c_root is authenticated during enrollment.
+// p_token, cmd, and sigma are runtime attacker-mutable fields.
+Leader -> Follower: [c_root], p_token, cmd, sigma
+
+principal Follower[
+    // MHT/Merkle membership abstraction:
+    // MVerify(p_token, Omega, c_root) = 1.
+    _ = ASSERT(c_root, HASH(p_token))?
+
+    digest_f = HASH(ctx, cmd)
+
+    // FORS verification abstraction:
+    // FORSVerify(p_token, digest_f, sigma) = 1.
+    _ = SIGNVERIF(p_token, digest_f, sigma)?
+
+    // Acceptance marker. Do not include sigma here, otherwise
+    // Verifpal treats attacker-supplied candidate sigma as accepted use.
+    accepted = HASH(cmd)
+]
+
+Follower -> Sink: [accepted]
+
+principal Sink[
+    use_accepted = HASH(accepted)
+]
+
+queries[
+    authentication? Leader -> Follower: p_token[
+        precondition[Follower -> Sink: accepted]
+    ]
+]

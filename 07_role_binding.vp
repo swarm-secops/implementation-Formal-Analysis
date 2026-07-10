@@ -1,0 +1,77 @@
+attacker[active]
+
+principal GCS[
+    knows public idl, idf, m
+    knows public leader_role, follower_role
+
+    knows private sk_gcs
+    knows private sk_token
+
+    pk_gcs = G^sk_gcs
+
+    // Command-token root abstraction.
+    p_token = G^sk_token
+    c_root = HASH(p_token)
+
+    // l_L = H(ID_L || leader || C_L || M)
+    leaf_l = HASH(idl, leader_role, c_root, m)
+
+    // l_Fi = H(ID_i || follower || M)
+    leaf_f = HASH(idf, follower_role, m)
+
+    // R = MRoot(l_L, l_Fi)
+    // Symbolic two-leaf abstraction of the mission root.
+    r = HASH(leaf_l, leaf_f)
+
+    // C_M = (M, R, ID_L, C_L, ...)
+    mission_record = HASH(m, r, idl, c_root)
+
+    sig_record = SIGN(sk_gcs, mission_record)
+]
+
+principal Follower[
+    knows public idl, idf, m
+    knows public leader_role, follower_role
+]
+
+principal Sink[
+    knows public sink_tag
+]
+
+// pk_gcs is pre-authenticated.
+// c_root, r, and sig_record are enrollment-time values.
+GCS -> Follower: [pk_gcs], c_root, r, sig_record
+
+principal Follower[
+    // Reconstruct leader and follower leaves.
+    leaf_l_f = HASH(idl, leader_role, c_root, m)
+    leaf_f_f = HASH(idf, follower_role, m)
+
+    // Recompute mission-root abstraction.
+    r_f = HASH(leaf_l_f, leaf_f_f)
+
+    // Ensure received R matches the role-bound reconstruction.
+    _ = ASSERT(r, r_f)?
+
+    // Reconstruct mission record.
+    mission_record_f = HASH(m, r, idl, c_root)
+
+    // Verify GCS authorization of the role-bound mission record.
+    _ = SIGNVERIF(pk_gcs, mission_record_f, sig_record)?
+
+    // Fresh marker after all checks.
+    generates enroll_marker
+    role_bound = HASH(enroll_marker)
+]
+
+Follower -> Sink: [role_bound]
+
+principal Sink[
+    use_role_bound = HASH(role_bound)
+]
+
+queries[
+    authentication? GCS -> Follower: c_root[
+        precondition[Follower -> Sink: role_bound]
+    ]
+]

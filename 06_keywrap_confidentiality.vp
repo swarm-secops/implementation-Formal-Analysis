@@ -1,0 +1,39 @@
+attacker[active]
+
+principal GCS[
+    knows public idf, m, r, wrap
+
+    knows private si
+    knows private ke
+
+    // Z_i = H(s_i || M || R || ID_i || wrap)
+    zi = HASH(si, m, r, idf, wrap)
+
+    // Symbolic abstraction of:
+    // W_i = K_E xor Trunc(Z_i)
+    wi = ENC(zi, ke)
+]
+
+principal Follower[
+    knows public idf, m, r, wrap
+
+    // Long-term follower secret shared with GCS.
+    knows private si
+]
+
+// W_i is transmitted during enrollment.
+// It may be observed by the attacker.
+GCS -> Follower: wi
+
+principal Follower[
+    // Recompute Z_i.
+    zi_f = HASH(si, m, r, idf, wrap)
+
+    // Recover K_E from the wrapper.
+    ke_f = DEC(zi_f, wi)
+]
+
+queries[
+    confidentiality? si
+    confidentiality? ke
+]

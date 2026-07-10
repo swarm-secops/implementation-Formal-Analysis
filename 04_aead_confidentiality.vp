@@ -1,0 +1,32 @@
+attacker[active]
+
+principal Leader[
+    knows public idl, m, r, gcm
+
+    knows private ke
+
+    generates q
+    generates cmd_q
+
+    ad_q = CONCAT(idl, q, m, r)
+
+    x_q = AEAD_ENC(ke, cmd_q, ad_q)
+]
+
+principal Follower[
+    knows public idl, m, r, gcm
+    knows private ke
+]
+
+Leader -> Follower: q, x_q
+
+principal Follower[
+    ad_f = CONCAT(idl, q, m, r)
+
+    cmd_f = AEAD_DEC(ke, x_q, ad_f)?
+]
+
+queries[
+    confidentiality? ke
+    confidentiality? cmd_q
+]

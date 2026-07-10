@@ -1,0 +1,69 @@
+attacker[active]
+
+principal Leader[
+    knows public idl, m, r
+
+    knows private sk_token
+
+    p_token = G^sk_token
+
+    // Merkle root abstraction for the authorized command token.
+    c_root = HASH(p_token)
+
+    generates q
+    generates cmd_q
+
+    // AD_q = ID_L || q || M || R
+    ad_q = CONCAT(idl, q, m, r)
+
+    // Simplified digest before adding AEAD.
+    d_q = HASH(ad_q, cmd_q)
+
+    // FORS-like one-time command opening.
+    sigma_q = SIGN(sk_token, d_q)
+]
+
+principal Follower[
+    knows public idl, m, r
+]
+
+principal Sink[
+    knows public sink_tag
+]
+
+// c_root is authenticated during enrollment.
+// p_token, q, cmd_q, and sigma_q are runtime attacker-mutable fields.
+Leader -> Follower: [c_root], p_token, q, cmd_q, sigma_q
+
+principal Follower[
+    // MHT/Merkle membership abstraction:
+    // MVerify(p_token, Omega_q, c_root) = 1.
+    _ = ASSERT(c_root, HASH(p_token))?
+
+    // Reconstruct AD_q = ID_L || q || M || R.
+    ad_f = CONCAT(idl, q, m, r)
+
+    // Recompute digest.
+    d_f = HASH(ad_f, cmd_q)
+
+    // FORS verification abstraction:
+    // FORSVerify(p_token, d_f, sigma_q) = 1.
+    _ = SIGNVERIF(p_token, d_f, sigma_q)?
+
+    // Fresh acceptance marker.
+    // It is deliberately independent of p_token, cmd_q, q, and sigma_q.
+    generates accept_marker
+    accepted = HASH(accept_marker)
+]
+
+Follower -> Sink: [accepted]
+
+principal Sink[
+    use_accepted = HASH(accepted)
+]
+
+queries[
+    authentication? Leader -> Follower: p_token[
+        precondition[Follower -> Sink: accepted]
+    ]
+]

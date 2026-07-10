@@ -1,0 +1,77 @@
+attacker[active]
+
+principal Leader[
+    knows public idl, m, r, gcm
+
+    knows private sk_token
+
+    p_token = G^sk_token
+
+    // Merkle root abstraction for the authorized command token.
+    c_root = HASH(p_token)
+
+    generates q
+
+    // X_q is treated as an opaque runtime ciphertext.
+    // AEAD encryption will be verified in a separate small model.
+    generates x_q
+
+    // AD_q = ID_L || q || M || R
+    ad_q = CONCAT(idl, q, m, r)
+
+    // N_q = H(AD_q || gcm)
+    n_q = HASH(ad_q, gcm)
+
+    // d_q = H(AD_q || N_q || X_q)
+    d_q = HASH(ad_q, n_q, x_q)
+
+    // FORS-like one-time command opening.
+    sigma_q = SIGN(sk_token, d_q)
+]
+
+principal Follower[
+    knows public idl, m, r, gcm
+]
+
+principal Sink[
+    knows public sink_tag
+]
+
+// c_root is authenticated during enrollment.
+// p_token, q, x_q, and sigma_q are runtime attacker-mutable fields.
+Leader -> Follower: [c_root], p_token, q, x_q, sigma_q
+
+principal Follower[
+    // MHT/Merkle membership abstraction:
+    // MVerify(p_token, Omega_q, c_root) = 1.
+    _ = ASSERT(c_root, HASH(p_token))?
+
+    // Reconstruct AD_q.
+    ad_f = CONCAT(idl, q, m, r)
+
+    // Reconstruct nonce abstraction.
+    n_f = HASH(ad_f, gcm)
+
+    // Recompute d_q = H(AD_q || N_q || X_q).
+    d_f = HASH(ad_f, n_f, x_q)
+
+    // FORS verification abstraction:
+    // FORSVerify(p_token, d_f, sigma_q) = 1.
+    _ = SIGNVERIF(p_token, d_f, sigma_q)?
+
+    // Fresh acceptance marker after MHT and FORS checks.
+    generates accept_marker
+    accepted = HASH(accept_marker)
+]
+
+Follower -> Sink: [accepted]
+
+principal Sink[
+    use_accepted = HASH(accepted)
+]
+
+queries[
+    authentication? Leader -> Follower: p_token[
+        precondition[Follower -> Sink: accepted]
+    ]
+]
